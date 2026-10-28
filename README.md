@@ -8,7 +8,27 @@ library, Python 3.9+ (the `python3` that ships with Apple's Command Line Tools w
 
 <sub>Recorded headless by the engine itself (`--reel`). Higher quality: [docs/demo.mp4](docs/demo.mp4).</sub>
 
-## Play
+## Play in the browser (phones too)
+
+**[ASCIIparticle Playground](https://claude.ai/artifact/12vyZmeNxTCUh4JxEC2Toe)** is a touch toy
+built on a JavaScript port of the engine (particles, wind, grass, curl-noise ink, the
+particle font). It's made for Android and iOS browsers, and works with a mouse too.
+
+| Gesture | Does |
+| --- | --- |
+| Drag | paint with the brush |
+| Tap | burst (fireball, ink splash, firework, lightning, snow) |
+| Fast swipe | gust of wind that pushes particles and grass |
+| Hold still | vortex that follows your finger |
+| Two-finger tap | next brush: fire, ink, sparks, rain, snow |
+| Three-finger tap | clear the sky |
+
+On a computer: drag, click, keys `1`–`5` pick a brush, `Space` next brush, `C` clears.
+
+The whole toy is one file, [`web/index.html`](web/index.html), with no build step. To
+host it anywhere else, serve that file as-is (for example from GitHub Pages).
+
+## Play in the terminal
 
 ```sh
 git clone https://github.com/BaruaSourav/ASCIIparticle.git

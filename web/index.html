@@ -1,0 +1,1031 @@
+<title>ASCIIparticle Playground</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#08070b">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Silkscreen&display=swap">
+<style>
+/* Layout: one full-bleed ASCII stage; a thin HUD floats over it, clear of the phone's notches. */
+:root {
+  --bg: #08070b;         /* night, faintly violet so the neon reads warm */
+  --fg: #ece6f5;
+  --dim: #8b829c;
+  --glass: rgba(20, 16, 30, 0.82);
+  --line: rgba(236, 230, 245, 0.14);
+  --magenta: #ff3df2;
+  --cyan: #3ff0ff;
+  --font-ui: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --font-display: "Silkscreen", "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+#stage {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  display: block;
+  background: var(--bg);
+}
+.hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  pointer-events: none;
+}
+.brand {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+}
+.brand b { color: var(--magenta); font-weight: 600; }
+.brush {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--glass);
+}
+#brushName {
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  min-width: 6ch;
+  text-align: center;
+}
+.dots { display: flex; gap: 5px; }
+.dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.dots i.on { background: var(--fg); }
+#helpBtn {
+  pointer-events: auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--glass);
+  color: var(--fg);
+  font: 600 15px var(--font-ui);
+  cursor: pointer;
+}
+#helpBtn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.help {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+  transform: translateX(-50%);
+  width: min(420px, calc(100% - 32px));
+  padding: 16px 18px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--glass);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+.help.gone { opacity: 0; }
+.help h1 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  color: var(--cyan);
+}
+.help dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.help dt { color: var(--magenta); font-weight: 600; }
+.help dd { margin: 0; color: var(--fg); min-width: 0; }
+.help p { margin: 12px 0 0; font-size: 11.5px; color: var(--dim); }
+.toast {
+  position: fixed;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-size: clamp(28px, 9vw, 56px);
+  letter-spacing: 0.08em;
+  color: var(--fg);
+  text-shadow: 0 0 18px var(--magenta);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.toast.show { opacity: 1; transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .help, .toast { transition: none; }
+}
+</style>
+
+<canvas id="stage" aria-label="ASCII particle playground. Drag to paint, tap to burst, swipe for wind."></canvas>
+
+<div class="hud">
+  <div class="brand"><b>ASCII</b>particle</div>
+  <div class="brush" aria-live="polite">
+    <span id="brushName">FIRE</span>
+    <span class="dots" id="dots"></span>
+  </div>
+  <button id="helpBtn" type="button" aria-label="Show gestures">?</button>
+</div>
+
+<div class="help" id="help">
+  <h1>Touch the night</h1>
+  <dl>
+    <dt>Drag</dt><dd>paint with the brush</dd>
+    <dt>Tap</dt><dd>burst</dd>
+    <dt>Fast swipe</dt><dd>gust of wind</dd>
+    <dt>Hold still</dt><dd>vortex that follows your finger</dd>
+    <dt>2-finger tap</dt><dd>next brush: fire, ink, sparks, rain, snow</dd>
+    <dt>3-finger tap</dt><dd>clear the sky</dd>
+  </dl>
+  <p>Touch anywhere to start. On a computer: drag, click, keys 1-5, C clears.</p>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ------------------------------------------------------------ colour ramps
+  const FIRE = ["#ffffff", "#ffffd7", "#ffff87", "#ffd75f", "#ffaf00", "#ff8700", "#ff5f00", "#d70000", "#af0000", "#870000"];
+  const EMBER = ["#ffffd7", "#ffd700", "#ffaf00", "#ff8700", "#d75f00", "#af5f00"];
+  const SMOKE = ["#a8a8a8", "#9e9e9e", "#8a8a8a", "#767676", "#626262", "#4e4e4e", "#3a3a3a", "#2a2a2a"];
+  const INK = [
+    ["#ff00ff", "#ff00d7", "#ff00af", "#d700af", "#af0087", "#87005f", "#5f005f"],
+    ["#00ff00", "#00d700", "#00af00", "#008700", "#005f00"],
+    ["#00ffff", "#00d7ff", "#00afff", "#0087d7", "#005faf", "#005f87", "#00005f"],
+    ["#ffffff", "#eeeeee", "#d0d0d0", "#a8a8a8", "#808080", "#585858"],
+  ];
+  const FW = [
+    ["#ffffff", "#ffd7d7", "#ffafaf", "#ff8787", "#ff5f5f", "#ff0000", "#d70000", "#af0000", "#870000", "#5f0000"],
+    ["#ffffff", "#ffffd7", "#ffff87", "#ffd75f", "#ffd700", "#ffaf00", "#ff8700", "#d78700", "#af5f00", "#875f00"],
+    ["#ffffff", "#d7ffd7", "#afffaf", "#87ff87", "#5fff5f", "#00ff00", "#00d700", "#00af00", "#008700", "#005f00"],
+    ["#ffffff", "#d7ffff", "#afffff", "#87d7ff", "#5fafff", "#0087ff", "#005fff", "#005fd7", "#0000af", "#00005f"],
+    ["#ffffff", "#ffd7ff", "#ffafff", "#ff87ff", "#ff5fff", "#ff00ff", "#d700d7", "#af00af", "#87005f", "#5f005f"],
+    ["#ffffff", "#d7ffff", "#afffff", "#87ffff", "#5fffff", "#00ffff", "#00d7d7", "#00afaf", "#008787", "#005f5f"],
+  ];
+  const RAIN = ["#00afff", "#0087ff", "#0087d7", "#005fd7"];
+  const SNOW = ["#ffffff", "#eeeeee", "#ffffff", "#d0d0d0", "#e4e4e4"];
+  const CLOUD = ["#bcbcbc", "#9e9e9e", "#808080", "#626262", "#444444"];
+  const GREENS = ["#005f00", "#008700", "#5faf00", "#afd75f", "#d7ff87"];
+  const FLOWERS = [["*", "#ff87ff"], ["*", "#ffafff"], ["o", "#ffff87"], ["@", "#ffd7ff"], ["*", "#afffff"]];
+  const DIRT = ["#875f00", "#af5f00", "#5f5f00", "#875f5f", "#af8700"];
+  const STREAK = ["#3a3a46", "#4e4e5e", "#626274", "#4e4e5e", "#3a3a46"];
+
+  function lerpHex(a, b, t) {
+    const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+    const ch = (s) => {
+      const x = (pa >> s) & 255, y = (pb >> s) & 255;
+      return Math.round(x + (y - x) * t);
+    };
+    return "#" + ((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1);
+  }
+  function gradient(stops, n) {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const t = (i / (n - 1)) * (stops.length - 1);
+      const j = Math.min(Math.floor(t), stops.length - 2);
+      out.push(lerpHex(stops[j], stops[j + 1], t - j));
+    }
+    return out;
+  }
+  const SPECTRUM = gradient(["#ff00ff", "#af00ff", "#00afff", "#00ffaf", "#87ff00"], 24);
+
+  // ------------------------------------------------------------------ noise
+  function makeNoise(seed) {
+    let s = seed >>> 0 || 1;
+    const rnd = () => {
+      s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+      return (s >>> 0) / 4294967296;
+    };
+    const p = [];
+    for (let i = 0; i < 256; i++) p.push(i);
+    for (let i = 255; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      const t = p[i]; p[i] = p[j]; p[j] = t;
+    }
+    const perm = new Uint8Array(512);
+    for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+    const vals = new Float32Array(256);
+    for (let i = 0; i < 256; i++) vals[i] = rnd() * 2 - 1;
+    const fade = (t) => t * t * (3 - 2 * t);
+    return {
+      n1(x) {
+        const xi = Math.floor(x), xf = x - xi, i = xi & 255;
+        const a = vals[perm[i]], b = vals[perm[i + 1]];
+        return a + (b - a) * fade(xf);
+      },
+      n2(x, y) {
+        const xi = Math.floor(x), yi = Math.floor(y);
+        const xf = x - xi, yf = y - yi;
+        const X = xi & 255, Y = yi & 255;
+        const u = fade(xf), w = fade(yf);
+        const aa = vals[perm[perm[X] + Y]], ba = vals[perm[perm[X + 1] + Y]];
+        const ab = vals[perm[perm[X] + Y + 1]], bb = vals[perm[perm[X + 1] + Y + 1]];
+        const x1 = aa + (ba - aa) * u, x2 = ab + (bb - ab) * u;
+        return x1 + (x2 - x1) * w;
+      },
+    };
+  }
+  const noise = makeNoise((Math.random() * 1e9) | 0);
+
+  // ------------------------------------------------------------- 5x5 font
+  const GLYPHS = {
+    A: [" ### ", "#   #", "#####", "#   #", "#   #"],
+    C: [" ####", "#    ", "#    ", "#    ", " ####"],
+    E: ["#####", "#    ", "#### ", "#    ", "#####"],
+    I: ["#####", "  #  ", "  #  ", "  #  ", "#####"],
+    L: ["#    ", "#    ", "#    ", "#    ", "#####"],
+    P: ["#### ", "#   #", "#### ", "#    ", "#    "],
+    R: ["#### ", "#   #", "#### ", "#  # ", "#   #"],
+    S: [" ####", "#    ", " ### ", "    #", "#### "],
+    T: ["#####", "  #  ", "  #  ", "  #  ", "  #  "],
+  };
+  function textWidth(t) { return t.length * 6 - 1; }
+  function bannerPoints(lines, cols, top, height) {
+    const widest = Math.max(...lines.map(textWidth));
+    let sx = widest * 2 <= cols - 4 ? 2 : 1;
+    let sy = 1;
+    const gap = 2;
+    if (sx === 2 && lines.length * 10 + gap <= height - 2) {
+      sy = 2;
+      if (widest * 4 <= cols - 4) sx = 4;
+    }
+    const totalH = lines.length * 5 * sy + (lines.length - 1) * gap;
+    let y = top + Math.max(0, Math.floor((height - totalH) / 2));
+    const pts = [];
+    for (const line of lines) {
+      let x = Math.max(0, Math.floor((cols - textWidth(line) * sx) / 2));
+      for (const ch of line) {
+        const rows = GLYPHS[ch];
+        rows.forEach((row, ry) => {
+          for (let rx = 0; rx < 5; rx++) {
+            if (row[rx] === " ") continue;
+            for (let k = 0; k < sx; k++)
+              for (let j = 0; j < sy; j++)
+                pts.push([x + rx * sx + k + 0.5, y + ry * sy + j + 0.5]);
+          }
+        });
+        x += 6 * sx;
+      }
+      y += 5 * sy + gap;
+    }
+    return pts;
+  }
+
+  // ------------------------------------------------------------ stage size
+  const cv = document.getElementById("stage");
+  const ctx = cv.getContext("2d", { alpha: false });
+  let W = 0, H = 0, dpr = 1, fontPx = 14, cw = 8.4, chh = 17, cols = 1, rows = 1, groundY = 1;
+  let asp = 0.5;
+  let time = 0;
+
+  // -------------------------------------------------------------- particles
+  // Velocities are in cells per second. Cells are taller than wide, so
+  // emitters scale vertical launch speeds by the cell aspect ratio.
+  let P = [];
+  let MAX = 2600;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const pick = (arr) => arr[(Math.random() * arr.length) | 0];
+  const pr = (v) => Math.floor(v) + (Math.random() < v - Math.floor(v) ? 1 : 0);
+
+  function em(cfg) {
+    return Object.assign({
+      chars: "*", mode: "life", colors: ["#ffffff"], colorMode: "life",
+      gravity: 0, drag: 0, wind: 0, flow: 0, collide: null, onDeath: null,
+      life: [1, 2], speed: [1, 4], angle: [0, 360], spread: 0, vy: 0,
+    }, cfg);
+  }
+  function spawn(e, x, y, vx, vy, life, ramp) {
+    if (P.length > MAX * 1.15) return null;
+    const p = { x, y, vx, vy, age: 0, life, em: e, k: Math.random(), ramp: ramp || null, home: null };
+    P.push(p);
+    return p;
+  }
+  function emit(e, n, x, y, ramp) {
+    for (let i = 0; i < n; i++) {
+      let px = x, py = y;
+      if (e.spread) {
+        const r = e.spread * Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
+        px += Math.cos(a) * r;
+        py += Math.sin(a) * r * asp;
+      }
+      const a = (rand(e.angle[0], e.angle[1]) * Math.PI) / 180;
+      const s = rand(e.speed[0], e.speed[1]);
+      spawn(e, px, py, Math.cos(a) * s, -Math.sin(a) * s * asp + e.vy, rand(e.life[0], e.life[1]), ramp);
+    }
+  }
+  function dirChar(vx, vy) {
+    const ax = Math.abs(vx), ay = Math.abs(vy) * 2;
+    if (ax > ay * 2) return "-";
+    if (ay > ax * 2) return "|";
+    return (vx > 0) === (vy > 0) ? "\\" : "/";
+  }
+
+  // ------------------------------------------------------------------ wind
+  const wind = { cols: [], extra: 0, turb: 1.4 };
+  function updateWind(dt) {
+    wind.extra *= Math.exp(-dt * 1.0);
+    const base = 3 + 2.5 * Math.sin(time * 0.07) + wind.extra;
+    const dir = base >= 0 ? 1 : -1;
+    const off = time * 12 * dir;
+    const c = wind.cols;
+    c.length = cols;
+    for (let x = 0; x < cols; x++) {
+      const g = noise.n1((x - off) * 0.035), g2 = noise.n1((x - off) * 0.11 + 50);
+      c[x] = base + 8 * dir * (Math.max(0, g) * 1.4 + 0.25 * g2);
+    }
+  }
+  function windAt(x) {
+    const i = x < 0 ? 0 : x >= cols ? cols - 1 : x | 0;
+    return wind.cols[i] || 0;
+  }
+
+  // ------------------------------------------------------------ flow field
+  const FLOW_CELL = 4;
+  let flowGrid = [], flowW = 0;
+  function updateFlow() {
+    const gw = Math.floor(cols / FLOW_CELL) + 2, gh = Math.floor(rows / FLOW_CELL) + 2;
+    const t = time * 0.15, s = 0.045, e = 0.35, k = 8 / (2 * e);
+    flowGrid = new Array(gw * gh);
+    flowW = gw;
+    for (let gy = 0; gy < gh; gy++) {
+      const y = gy * FLOW_CELL * s * 2 + t * 0.7;
+      for (let gx = 0; gx < gw; gx++) {
+        const x = gx * FLOW_CELL * s + t;
+        flowGrid[gy * gw + gx] = [
+          (noise.n2(x, y + e) - noise.n2(x, y - e)) * k,
+          -(noise.n2(x + e, y) - noise.n2(x - e, y)) * k * asp,
+        ];
+      }
+    }
+  }
+  function flowAt(x, y) {
+    let gx = (x / FLOW_CELL) | 0, gy = (y / FLOW_CELL) | 0;
+    gx = gx < 0 ? 0 : gx >= flowW ? flowW - 1 : gx;
+    const gh = flowGrid.length / flowW;
+    gy = gy < 0 ? 0 : gy >= gh ? gh - 1 : gy;
+    return flowGrid[gy * flowW + gx];
+  }
+
+  // ---------------------------------------------------------------- vortex
+  const vortices = new Set();
+  function applyVortex(v, p, dt) {
+    const dx = p.x - v.x, dy = (p.y - v.y) / asp;
+    const r = Math.sqrt(dx * dx + dy * dy) + 0.5;
+    const f = 1 / (1 + (r / v.radius) * (r / v.radius));
+    const tx = (-dy / r) * v.strength * f, ty = (dx / r) * v.strength * f;
+    const rx = (-dx / r) * v.pull * f, ry = (-dy / r) * v.pull * f;
+    p.vx += (tx + rx) * dt;
+    p.vy += (ty + ry) * asp * dt;
+  }
+
+  // ----------------------------------------------------------------- grass
+  let blades = [], dirt = [], snowDepth = [];
+  function buildGround() {
+    blades = [];
+    for (let x = 0; x < cols; x++) {
+      if (Math.random() > 0.9) continue;
+      let h = 1 + ((Math.random() * 4) | 0);
+      if (Math.random() < 0.15) h++;
+      const start = (Math.random() * 2) | 0;
+      const ramp = [];
+      for (let i = 0; i < h; i++) ramp.push(GREENS[Math.min(4, start + Math.floor((i * (5 - start)) / h))]);
+      blades.push({
+        x, h, stiff: rand(0.7, 1.4), phase: rand(0, 6.28), ramp, angle: 0, vel: 0,
+        tip: Math.random() < 0.05 ? pick(FLOWERS) : null,
+      });
+    }
+    dirt = [];
+    for (let i = 0; i < cols * 4; i++) dirt.push([pick(" .,:'`;"), pick(DIRT)]);
+    const old = snowDepth;
+    snowDepth = new Array(cols).fill(0).map((_, i) => old[i] || 0);
+  }
+  function disturbGrass(x, radius, push, dir) {
+    for (const b of blades) {
+      const d = b.x - x;
+      if (d > -radius && d < radius) b.vel += push * (1 - Math.abs(d) / radius) * (dir || (d >= 0 ? 1 : -1));
+    }
+  }
+  function updateGrass(dt) {
+    for (const b of blades) {
+      let target = windAt(b.x) / (9 * b.stiff) + 0.07 * Math.sin(time * 3 + b.phase);
+      target = Math.max(-1.4, Math.min(1.4, target));
+      b.vel += ((target - b.angle) * 32 * b.stiff - b.vel * 5) * dt;
+      b.angle += b.vel * dt;
+      if (b.angle > 1.6) { b.angle = 1.6; b.vel = 0; }
+      if (b.angle < -1.6) { b.angle = -1.6; b.vel = 0; }
+    }
+  }
+  function bladeChar(l) {
+    if (l > 1.05 || l < -1.05) return "~";
+    if (l > 0.3) return "/";
+    if (l < -0.3) return "\\";
+    return "|";
+  }
+
+  // ----------------------------------------------------------- emitters
+  const E = {
+    fire: em({ chars: "$&%*^'.", colors: FIRE, gravity: -9, drag: 1, wind: 0.5, life: [0.5, 1.2], speed: [4, 9], angle: [70, 110], spread: 1.6 }),
+    fireball: em({ chars: "$&%*^'.", colors: FIRE, gravity: -4, drag: 1.6, wind: 0.4, life: [0.5, 1.1], speed: [4, 14] }),
+    ember: em({ chars: "*.'", mode: "random", colors: EMBER, gravity: -2, drag: 0.5, wind: 1.2, life: [1.2, 2.6], speed: [5, 12], angle: [50, 130], spread: 1 }),
+    smoke: em({ chars: "@Oo*:.", colors: SMOKE, gravity: -2.5, drag: 0.5, wind: 1.6, life: [2.5, 4.5], speed: [1, 3], angle: [80, 100], spread: 1.5 }),
+    ink: em({ chars: "@#%&$*+=-:.", flow: 1.4, drag: 0.4, life: [3.5, 6.5], speed: [0.5, 2], spread: 2 }),
+    inkBurst: em({ chars: "@#%&$*+=-:.", flow: 1.0, drag: 0.9, life: [2.5, 5], speed: [6, 16] }),
+    drip: em({ chars: "|:'.", gravity: 7, drag: 1.2, life: [1.5, 3], speed: [0, 0] }),
+    trail: em({ chars: "*+'.", gravity: 5, drag: 1.5, wind: 0.3, life: [0.5, 1.2], speed: [1, 5], spread: 0.8 }),
+    star: em({ chars: "@@**++:'.", gravity: 7, drag: 1.1, wind: 0.25 }),
+    willow: em({ chars: "*:'.,.", gravity: 4, drag: 2.2, wind: 0.4 }),
+    sparkle: em({ chars: "+.", colors: ["#ffffff", "#eeeeee", "#ffffaf"], life: [0.1, 0.3], speed: [1, 4] }),
+    flash: em({ chars: "@", colors: ["#ffffff"] }),
+    cloud: em({ chars: "@O0o.", colors: CLOUD, life: [0.4, 0.9], speed: [0, 2], spread: 5, wind: 0.6 }),
+    rain: em({ chars: "|", mode: "dir", colors: RAIN, colorMode: "random", gravity: 28, wind: 0.7, collide: "die", life: [4, 4], speed: [0, 0], vy: 16, spread: 5 }),
+    splash: em({ chars: ".,", colors: ["#5fafff", "#5f87d7"], life: [0.15, 0.3], speed: [3, 6], angle: [30, 150] }),
+    snow: em({ chars: "*.+'", mode: "random", colors: SNOW, colorMode: "random", gravity: 0.8, drag: 0.5, wind: 0.9, collide: "die", life: [25, 25], speed: [0, 2], spread: 4 }),
+    snowBurst: em({ chars: "*.+'", mode: "random", colors: SNOW, colorMode: "random", gravity: 1.5, drag: 1.4, wind: 0.6, collide: "die", life: [25, 25], speed: [4, 12] }),
+    gust: em({ chars: "~-.", colors: ["#d7ffff", "#87d7ff", "#5fafd7", "#5f87af", "#5f5f87"], life: [0.4, 0.8], speed: [0, 0] }),
+    streak: em({ chars: ".-~~-.", colors: STREAK, wind: 3, life: [1.2, 2.5], speed: [0, 0] }),
+    letter: em({ chars: "#@%&", mode: "random" }),
+    loose: em({ chars: "#@%&*+:.", wind: 0.6, drag: 0.8, gravity: 2 }),
+  };
+  E.rain.onDeath = (p) => { if (Math.random() < 0.3) emit(E.splash, 2, p.x, p.y - 0.5); };
+  const land = (p) => {
+    const i = p.x | 0;
+    if (i >= 0 && i < snowDepth.length) snowDepth[i] = Math.min(1, snowDepth[i] + 0.12);
+  };
+  E.snow.onDeath = land;
+  E.snowBurst.onDeath = land;
+  E.crackle = em(Object.assign({}, E.star, { chars: "*+.", onDeath: (p) => { if (Math.random() < 0.5) emit(E.sparkle, 2, p.x, p.y); } }));
+
+  // ------------------------------------------------------------- brushes
+  let bolt = null, flash = 0;
+  function lightning(x0, y0) {
+    const path = [];
+    let x = x0;
+    for (let y = Math.max(0, y0 | 0); y <= groundY; y++) {
+      const step = pick([-1, 0, 0, 1]);
+      path.push([x, y, step < 0 ? "/" : step > 0 ? "\\" : "|"]);
+      x += step;
+    }
+    bolt = { path, t: 0.35 };
+    flash = 0.15;
+    wind.extra += 8 * (Math.random() < 0.5 ? -1 : 1);
+    buzz(25);
+  }
+  function firework(x, y) {
+    const ramp = pick(FW);
+    const kind = pick(["peony", "peony", "ring", "willow", "palm", "crackle"]);
+    if (kind === "ring") {
+      const n = 56, base = rand(18, 24), tilt = rand(0.6, 1);
+      for (let i = 0; i < n; i++) {
+        const a = (Math.PI * 2 * i) / n, s = base * rand(0.96, 1.04);
+        spawn(E.star, x, y, Math.cos(a) * s, -Math.sin(a) * s * asp * tilt, rand(1.2, 1.7), ramp);
+      }
+    } else if (kind === "willow") {
+      for (let i = 0; i < 90; i++) {
+        const a = rand(0, 6.283), s = rand(4, 20);
+        spawn(E.willow, x, y, Math.cos(a) * s, -Math.sin(a) * s * asp, rand(2.4, 3.6), FW[1]);
+      }
+    } else if (kind === "palm") {
+      const arms = 6 + ((Math.random() * 4) | 0);
+      for (let i = 0; i < arms; i++) {
+        const a = (Math.PI * 2 * i) / arms + rand(-0.1, 0.1);
+        for (let j = 0; j < 10; j++) {
+          const s = 8 + j * 2;
+          spawn(E.star, x, y, Math.cos(a) * s, -Math.sin(a) * s * asp, rand(1.3, 2), ramp);
+        }
+      }
+    } else {
+      const e = kind === "crackle" ? E.crackle : E.star;
+      for (let i = 0; i < 130; i++) {
+        const a = rand(0, 6.283), s = rand(4, 26);
+        spawn(e, x, y, Math.cos(a) * s, -Math.sin(a) * s * asp, rand(1.1, 2), ramp);
+      }
+    }
+    spawn(E.flash, x, y, 0, 0, 0.12);
+    buzz(12);
+  }
+
+  let inkBand = 0;
+  const BRUSHES = [
+    {
+      name: "FIRE",
+      paint(x, y, dt, move) {
+        emit(E.fire, pr(140 * dt + move * 3), x, y);
+        emit(E.ember, pr(7 * dt + move * 0.2), x, y);
+        emit(E.smoke, pr(8 * dt), x, y - 3);
+      },
+      burst(x, y) {
+        emit(E.fireball, 70, x, y);
+        emit(E.ember, 25, x, y);
+        emit(E.smoke, 6, x, y - 1);
+        buzz(12);
+      },
+    },
+    {
+      name: "INK",
+      paint(x, y, dt, move) {
+        emit(E.ink, pr(100 * dt + move * 4), x, y, INK[(inkBand + Math.floor(time * 0.8)) % INK.length]);
+      },
+      burst(x, y) {
+        const ramp = INK[(Math.random() * INK.length) | 0];
+        for (let i = 0; i < 90; i++) {
+          const a = rand(0, 6.283), s = rand(6, 16);
+          spawn(E.inkBurst, x, y, Math.cos(a) * s, -Math.sin(a) * s * asp, rand(2.5, 5), ramp);
+        }
+        buzz(12);
+      },
+    },
+    {
+      name: "SPARKS",
+      ramp: FW[0],
+      paint(x, y, dt, move) {
+        emit(E.trail, pr(45 * dt + move * 3), x, y, this.ramp);
+      },
+      start() { this.ramp = pick(FW); },
+      burst: firework,
+    },
+    {
+      name: "RAIN",
+      paint(x, y, dt) {
+        emit(E.cloud, pr(30 * dt), x, y);
+        emit(E.rain, pr(70 * dt), x, y + 1);
+      },
+      burst(x, y) { lightning(x, y); },
+    },
+    {
+      name: "SNOW",
+      paint(x, y, dt, move) {
+        emit(E.snow, pr(40 * dt + move), x, y);
+      },
+      burst(x, y) {
+        emit(E.snowBurst, 60, x, y);
+        buzz(10);
+      },
+    },
+  ];
+  let brushIndex = 0;
+  const brush = () => BRUSHES[brushIndex];
+
+  // ---------------------------------------------------------------- HUD
+  const brushName = document.getElementById("brushName");
+  const dots = document.getElementById("dots");
+  const toast = document.getElementById("toast");
+  const help = document.getElementById("help");
+  const helpBtn = document.getElementById("helpBtn");
+  BRUSHES.forEach(() => dots.appendChild(document.createElement("i")));
+  let toastTimer = 0;
+  function showBrush(announce) {
+    brushName.textContent = brush().name;
+    [...dots.children].forEach((d, i) => d.classList.toggle("on", i === brushIndex));
+    if (announce) {
+      toast.textContent = brush().name;
+      toast.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("show"), 450);
+    }
+  }
+  function setBrush(i, announce) {
+    brushIndex = ((i % BRUSHES.length) + BRUSHES.length) % BRUSHES.length;
+    if (brush().start) brush().start();
+    inkBand = (inkBand + 1) % INK.length;
+    showBrush(announce);
+  }
+  function buzz(ms) {
+    try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* not allowed here */ }
+  }
+  helpBtn.addEventListener("click", () => help.classList.toggle("gone"));
+
+  // ------------------------------------------------------------ banner
+  let bannerOn = false;
+  function buildBanner() {
+    const top = 2, height = Math.max(8, Math.floor(groundY * 0.62));
+    const homes = bannerPoints(["ASCII", "PARTICLE"], cols, top, height);
+    const mine = P.filter((p) => p.em === E.letter);
+    homes.sort(() => Math.random() - 0.5);
+    homes.forEach((h, i) => {
+      const hue = SPECTRUM[Math.min(SPECTRUM.length - 1, Math.floor((h[0] / cols) * SPECTRUM.length))];
+      let p = mine[i];
+      if (!p) {
+        const fromSide = Math.random() < 0.5;
+        p = spawn(E.letter, fromSide ? pick([-4, cols + 4]) : rand(0, cols), fromSide ? rand(0, rows) : pick([-3, rows + 3]), 0, 0, 1e9);
+        if (!p) return;
+      }
+      p.home = h;
+      p.ramp = [hue];
+    });
+    mine.slice(homes.length).forEach((p) => { p.home = null; p.em = E.loose; p.life = p.age + rand(0.5, 1.5); });
+    bannerOn = true;
+  }
+  function releaseBanner(cx, cy) {
+    if (!bannerOn) return;
+    bannerOn = false;
+    for (const p of P) {
+      if (p.em !== E.letter) continue;
+      const dx = p.x - cx, dy = (p.y - cy) / asp;
+      const r = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+      const v = rand(20, 45);
+      p.vx += (dx / r) * v;
+      p.vy += (dy / r) * v * asp;
+      p.home = null;
+      p.em = E.loose;
+      p.life = p.age + rand(1.5, 3);
+    }
+  }
+
+  // ------------------------------------------------------------- gestures
+  const pointers = new Map();
+  let multi = null;          // multi-finger gesture in progress
+  let lastInput = -1e9;
+  let started = false;
+  const LONG_MS = 450;
+
+  function toCell(e) {
+    const r = cv.getBoundingClientRect();
+    return [((e.clientX - r.left) / r.width) * W / cw, ((e.clientY - r.top) / r.height) * H / chh];
+  }
+  function begin() {
+    if (started) return;
+    started = true;
+    help.classList.add("gone");
+    try {
+      if (navigator.wakeLock) navigator.wakeLock.request("screen").catch(() => {});
+    } catch (e) { /* optional */ }
+  }
+  function gust(x, y, vx, vy) {
+    const r = 9;
+    for (const p of P) {
+      const dx = p.x - x, dy = (p.y - y) / asp;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < r * r) {
+        const f = 1 - Math.sqrt(d2) / r;
+        p.vx += vx * f * 0.7;
+        p.vy += vy * f * 0.7;
+      }
+    }
+    if (y > groundY - 8) disturbGrass(x, 10, Math.min(8, Math.abs(vx) * 0.05), vx >= 0 ? 1 : -1);
+    wind.extra = Math.max(-25, Math.min(25, wind.extra + vx * 0.04));
+    for (let i = 0; i < 4; i++) {
+      spawn(E.gust, x + rand(-2, 2), y + rand(-1, 1), vx * 0.8, vy * 0.8, rand(0.3, 0.7));
+    }
+  }
+
+  cv.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    try { cv.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    begin();
+    lastInput = performance.now();
+    const [x, y] = toCell(e);
+    const now = performance.now();
+    const p = { id: e.pointerId, x, y, sx: x, sy: y, lx: x, ly: y, t0: now, lt: now, dist: 0, vx: 0, vy: 0, long: false, vortex: null, lastGust: 0, move: 0 };
+    pointers.set(e.pointerId, p);
+    if (e.button === 2) {
+      setBrush(brushIndex + 1, true);
+      pointers.delete(e.pointerId);
+      return;
+    }
+    if (pointers.size >= 2) {
+      if (!multi) multi = { t0: now, max: 0, moved: 0 };
+      multi.max = Math.max(multi.max, pointers.size);
+      for (const q of pointers.values()) {
+        if (q.vortex) { vortices.delete(q.vortex); q.vortex = null; }
+      }
+    } else {
+      releaseBanner(x, y);
+      if (brush().start) brush().start();
+    }
+  });
+
+  cv.addEventListener("pointermove", (e) => {
+    const p = pointers.get(e.pointerId);
+    if (!p) return;
+    e.preventDefault();
+    lastInput = performance.now();
+    const [x, y] = toCell(e);
+    const now = performance.now();
+    const dt = Math.max(1, now - p.lt);
+    const dx = x - p.x, dy = y - p.y;
+    p.vx = p.vx * 0.5 + ((dx / dt) * 1000) * 0.5;   // cells per second
+    p.vy = p.vy * 0.5 + ((dy / dt) * 1000) * 0.5;
+    p.dist += Math.hypot(dx * cw, dy * chh);
+    if (multi) multi.moved = Math.max(multi.moved, p.dist);
+    p.move += Math.hypot(dx, dy / asp);
+    p.x = x; p.y = y; p.lt = now;
+    if (p.vortex) { p.vortex.x = x; p.vortex.y = y; }
+    const speedPx = Math.hypot(p.vx * cw, p.vy * chh) / 1000;  // px per ms
+    if (!multi && speedPx > 1.1 && now - p.lastGust > 50) {
+      p.lastGust = now;
+      gust(x, y, p.vx * 0.6, p.vy * 0.6);
+    }
+  });
+
+  function end(e) {
+    const p = pointers.get(e.pointerId);
+    if (!p) return;
+    pointers.delete(e.pointerId);
+    if (p.vortex) vortices.delete(p.vortex);
+    const now = performance.now();
+    if (multi) {
+      if (pointers.size === 0) {
+        if (now - multi.t0 < 450 && multi.moved < 30) {
+          if (multi.max === 2) setBrush(brushIndex + 1, true);
+          else if (multi.max >= 3) clearAll();
+        }
+        multi = null;
+      }
+      return;
+    }
+    if (e.type === "pointerup" && !p.long && now - p.t0 < 260 && p.dist < 14) brush().burst(p.x, p.y);
+  }
+  cv.addEventListener("pointerup", end);
+  cv.addEventListener("pointercancel", end);
+  cv.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  function clearAll() {
+    P = P.filter((p) => p.em === E.letter && bannerOn);
+    snowDepth.fill(0);
+    vortices.clear();
+    toast.textContent = "CLEAR";
+    toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove("show"), 450);
+    buzz(20);
+  }
+
+  window.addEventListener("keydown", (e) => {
+    lastInput = performance.now();
+    if (e.key >= "1" && e.key <= String(BRUSHES.length)) setBrush(Number(e.key) - 1, true);
+    else if (e.key === " " || e.key === "Tab") { e.preventDefault(); setBrush(brushIndex + 1, true); }
+    else if (e.key === "c" || e.key === "C") clearAll();
+    else if (e.key === "?") help.classList.toggle("gone");
+  });
+
+  // --------------------------------------------------- demo ghost finger
+  // Paints on its own until someone touches the screen, and again after
+  // a long pause, so the page is never an empty black rectangle.
+  const ghost = { brush: 1, switchAt: 0, burstAt: 0, active: false };
+  function ghostPos(t) {
+    const yMid = bannerOn ? 0.84 : 0.62, yAmp = bannerOn ? 0.07 : 0.2;
+    return [cols * (0.5 + 0.34 * Math.sin(t * 0.62)), groundY * (yMid + yAmp * Math.sin(t * 1.13 + 1))];
+  }
+  function runGhost(dt) {
+    const idle = performance.now() - lastInput;
+    const want = !started ? time > 2.2 : idle > 25000;
+    if (!want) { ghost.active = false; return; }
+    if (!ghost.active) { ghost.active = true; ghost.switchAt = time + 6; ghost.burstAt = time + 1.5; }
+    if (time > ghost.switchAt) { ghost.brush = (ghost.brush + 1) % BRUSHES.length; ghost.switchAt = time + 6; }
+    const [x, y] = ghostPos(time);
+    const b = BRUSHES[ghost.brush];
+    const saved = brushIndex;
+    brushIndex = ghost.brush;
+    if (b.name === "RAIN") b.paint(x, Math.max(2, y - 10), dt, 0.3);
+    else b.paint(x, y, dt, 0.3);
+    if (time > ghost.burstAt) {
+      ghost.burstAt = time + rand(1.4, 2.4);
+      const [bx, by] = ghostPos(time + 0.7);
+      if (b.name === "RAIN") lightning(bx, 2);
+      else if (b.name !== "FIRE" || Math.random() < 0.5) b.burst(bx, by * 0.8);
+    }
+    brushIndex = saved;
+  }
+
+  // ------------------------------------------------------------- update
+  function update(dt) {
+    time += dt;
+    updateWind(dt);
+    updateGrass(dt);
+    updateFlow();
+
+    for (const p of pointers.values()) {
+      if (multi) continue;
+      if (!p.long && p.dist < 10 && performance.now() - p.t0 > LONG_MS) {
+        p.long = true;
+        p.vortex = { x: p.x, y: p.y, strength: 34, pull: 6, radius: 10 };
+        vortices.add(p.vortex);
+        buzz(15);
+      }
+      if (!p.long) {
+        brush().paint(p.x, p.y, dt, Math.min(6, p.move));
+        if (p.y > groundY - 6) disturbGrass(p.x, 3, 0.5);
+      }
+      p.move = 0;
+    }
+    runGhost(dt);
+
+    // ink drips
+    if (Math.random() < dt * 14 && P.length) {
+      const q = P[(Math.random() * P.length) | 0];
+      if (q.em === E.ink && q.age < q.life * 0.5) spawn(E.drip, q.x, q.y + 1, 0, 0, rand(1.5, 3), q.ramp);
+    }
+    // ambient wind streaks
+    if (Math.random() < dt * (1 + Math.abs(wind.extra) * 0.3) * cols / 40) {
+      spawn(E.streak, rand(0, cols), rand(1, groundY - 2), 0, 0, rand(1.2, 2.5));
+    }
+    if (!pointers.size && !ghost.active) {
+      for (let i = 0; i < snowDepth.length; i++) snowDepth[i] = Math.max(0, snowDepth[i] - dt * 0.01);
+    }
+
+    // particles
+    let w = 0;
+    for (let i = 0; i < P.length; i++) {
+      const p = P[i], e = p.em;
+      p.age += dt;
+      if (p.age >= p.life) { if (e.onDeath) e.onDeath(p); continue; }
+      if (e.wind) {
+        const k = Math.min(1, e.wind * dt);
+        p.vx += (windAt(p.x) - p.vx) * k;
+        p.vy += (wind.turb * Math.sin(p.x * 0.21 + p.y * 0.7 + time * 2.3) - p.vy) * k;
+      }
+      if (e.flow) {
+        const f = flowAt(p.x, p.y), k = e.flow * dt;
+        p.vx += (f[0] - p.vx) * k;
+        p.vy += (f[1] - p.vy) * k;
+      }
+      if (p.home) {
+        p.vx += ((p.home[0] - p.x) * 22 - p.vx * 5) * dt;
+        p.vy += ((p.home[1] - p.y) * 22 - p.vy * 5) * dt;
+        if (Math.random() < 0.03) p.k = Math.random();
+      }
+      if (vortices.size && e !== E.letter) for (const v of vortices) applyVortex(v, p, dt);
+      if (e.drag) { const d = Math.max(0, 1 - e.drag * dt); p.vx *= d; p.vy *= d; }
+      p.vy += e.gravity * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (e.collide && p.y >= groundY) {
+        if (e.collide === "die") { p.y = groundY; if (e.onDeath) e.onDeath(p); continue; }
+      }
+      if (!p.home && (p.x < -cols * 0.5 || p.x > cols * 1.5 || p.y > rows + 2 || p.y < -rows)) continue;
+      P[w++] = p;
+    }
+    P.length = w;
+    if (P.length > MAX) {
+      let excess = P.length - MAX;   // drop the oldest, but never banner letters
+      P = P.filter((p) => p.home || excess-- <= 0);
+    }
+    if (bolt) { bolt.t -= dt; if (bolt.t <= 0) bolt = null; }
+    flash = Math.max(0, flash - dt);
+  }
+
+  // --------------------------------------------------------------- render
+  let gChar = [], gCol = [];
+  function put(x, y, c, col) {
+    if (x < 0 || y < 0) return;
+    const xi = x | 0, yi = y | 0;
+    if (xi >= cols || yi >= rows) return;
+    const i = yi * cols + xi;
+    gChar[i] = c;
+    gCol[i] = col;
+  }
+  function render() {
+    const n = cols * rows;
+    if (gChar.length !== n) { gChar = new Array(n); gCol = new Array(n); }
+    gChar.fill("");
+
+    ctx.fillStyle = flash > 0.08 ? "#c8c8d0" : flash > 0 ? "#3a3a46" : "#08070b";
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = "#120d0a";
+    ctx.fillRect(0, (groundY + 1) * chh * dpr, cv.width, cv.height);
+
+    // ground, snow, grass
+    for (let y = groundY + 1, row = 0; y < rows; y++, row++) {
+      for (let x = 0; x < cols; x++) {
+        const d = dirt[(row * cols + x) % dirt.length];
+        if (d[0] !== " ") put(x, y, d[0], d[1]);
+      }
+    }
+    for (let x = 0; x < cols; x++) {
+      const d = snowDepth[x];
+      if (d > 0.15) put(x, groundY, d < 0.45 ? "." : d < 0.8 ? "_" : "=", "#ffffff");
+    }
+    for (const b of blades) {
+      let off = 0;
+      for (let s = 0; s < b.h; s++) {
+        const lean = (b.angle * (s + 1)) / b.h;
+        off += lean * 0.85;
+        if (s === b.h - 1 && b.tip) put(b.x + Math.round(off), groundY - s, b.tip[0], b.tip[1]);
+        else put(b.x + Math.round(off), groundY - s, bladeChar(lean), b.ramp[s]);
+      }
+    }
+    // particles
+    for (let i = 0; i < P.length; i++) {
+      const p = P[i], e = p.em;
+      const t = p.age / p.life;
+      const chars = e.chars;
+      const c = e.mode === "life" ? chars[(t * chars.length) | 0]
+        : e.mode === "random" ? chars[(p.k * chars.length) | 0]
+        : dirChar(p.vx, p.vy);
+      if (c === " ") continue;
+      const ramp = p.ramp || e.colors;
+      put(p.x, p.y, c, e.colorMode === "life" ? ramp[(t * ramp.length) | 0] : ramp[(p.k * ramp.length) | 0]);
+    }
+    if (bolt) {
+      const col = bolt.t > 0.25 ? "#ffffff" : bolt.t > 0.12 ? "#d7ffff" : "#d7afff";
+      for (const [x, y, c] of bolt.path) put(x, y, c, col);
+    }
+    for (const v of vortices) {
+      for (let i = 0; i < 8; i++) {
+        const a = time * 5 + (i * Math.PI) / 4;
+        put(v.x + Math.cos(a) * 3, v.y + Math.sin(a) * 3 * asp, ".", "#5f5f87");
+      }
+    }
+
+    // draw, batched by colour
+    const buckets = new Map();
+    for (let i = 0; i < n; i++) {
+      const c = gChar[i];
+      if (!c) continue;
+      const col = gCol[i];
+      let list = buckets.get(col);
+      if (!list) { list = []; buckets.set(col, list); }
+      list.push(i);
+    }
+    const sx = cw * dpr, sy = chh * dpr;
+    for (const [col, list] of buckets) {
+      ctx.fillStyle = col;
+      for (const i of list) ctx.fillText(gChar[i], (i % cols) * sx, ((i / cols) | 0) * sy);
+    }
+  }
+
+  // --------------------------------------------------------------- layout
+  function resize() {
+    dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    cv.width = Math.round(W * dpr);
+    cv.height = Math.round(H * dpr);
+    fontPx = Math.max(10, Math.min(15, W / (52 * 0.6)));
+    ctx.font = `${fontPx * dpr}px "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace`;
+    ctx.textBaseline = "top";
+    cw = ctx.measureText("M").width / dpr;
+    chh = Math.round(fontPx * 1.22);
+    asp = cw / chh;
+    cols = Math.max(20, Math.floor(W / cw));
+    rows = Math.max(12, Math.floor(H / chh));
+    const bottomInset = 3;
+    groundY = rows - bottomInset;
+    buildGround();
+    updateWind(0);
+    updateFlow();
+    if (bannerOn || !started) buildBanner();
+  }
+  window.addEventListener("resize", resize);
+
+  // ----------------------------------------------------------------- loop
+  let last = performance.now(), slow = 0, fast = 0;
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    const ms = now - last;
+    last = now;
+    update(dt);
+    render();
+    // keep phones smooth: shed particles when frames run long
+    if (ms > 26) { slow++; fast = 0; } else if (ms < 15) { fast++; slow = 0; }
+    if (slow > 30) { MAX = Math.max(900, Math.floor(MAX * 0.85)); slow = 0; }
+    if (fast > 120) { MAX = Math.min(2800, Math.floor(MAX * 1.05)); fast = 0; }
+    requestAnimationFrame(frame);
+  }
+
+  showBrush(false);
+  resize();
+  if (document.fonts && document.fonts.load) {
+    document.fonts.load(`${fontPx}px "IBM Plex Mono"`).then(resize).catch(() => {});
+  }
+  requestAnimationFrame((t) => { last = t; frame(t); });
+})();
+</script>
